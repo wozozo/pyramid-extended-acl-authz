@@ -1,0 +1,15 @@
+venv/
+build/
+dist/
+.cache/
+.eggs/
+.tox/
+__pycache__
+*.pyc
+*.pyo
+*.egg-info
+*.egg
+*~
+*.swp
+*.swo
+#*
