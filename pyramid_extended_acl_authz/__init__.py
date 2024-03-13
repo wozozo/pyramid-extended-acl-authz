@@ -1,20 +1,19 @@
-import itertools
 from collections import namedtuple
 from zope.interface import implementer
 from pyramid.interfaces import IAuthorizationPolicy
 from pyramid.location import lineage
-from pyramid.compat import is_nonstr_iter
+from pyramid.util import is_nonstr_iter
 from pyramid.security import (
-    PermitsResult,
     Allow,
     Deny,
     Everyone,
-    )
+)
 
 
 ACEBase = namedtuple('ACEBase', ['action', 'principals', 'permissions'])
-class ACE(ACEBase):
 
+
+class ACE(ACEBase):
     def __new__(cls, action, principals, permissions, original_ace=None):
         inst = ACEBase.__new__(cls, action, principals, permissions)
         inst.original_ace = original_ace
@@ -25,7 +24,6 @@ class ACE(ACEBase):
 
 
 class ExtendedACLPermitsResult(int):
-
     def __new__(cls, aces, permissions, principals):
         inst = int.__new__(cls, cls.boolval)
         inst.aces = aces
@@ -36,23 +34,29 @@ class ExtendedACLPermitsResult(int):
     @property
     def msg(self):
         s = [
-            '%s permission(s) {%s} for principal(s) {%s}' % (
+            '%s permission(s) {%s} for principal(s) {%s}'
+            % (
                 self.__class__.__name__,
                 ', '.join(str(x) for x in sorted(self.permissions)),
-                ', '.join(str(x) for x in sorted(self.principals))
-                )
-            ]
+                ', '.join(str(x) for x in sorted(self.principals)),
+            )
+        ]
         for (context, acl), ace in self.aces:
-            s.append('via %r in ACL %r on context %r' % (ace, acl, context,))
+            s.append(
+                'via %r in ACL %r on context %r'
+                % (
+                    ace,
+                    acl,
+                    context,
+                )
+            )
         return ' '.join(s)
 
     def __str__(self):
         return self.msg
 
     def __repr__(self):
-        return '<%s instance at %s with msg %r>' % (self.__class__.__name__,
-                                                    id(self),
-                                                    self.msg)
+        return '<%s instance at %s with msg %r>' % (self.__class__.__name__, id(self), self.msg)
 
 
 class ExtendedACLAllowed(ExtendedACLPermitsResult):
@@ -88,19 +92,15 @@ def resolve_acl(location):
 
 
 def parse_permission(permission):
-    return set(
-        permission if is_nonstr_iter(permission)
-        else permission.split('+'))
+    return set(permission if is_nonstr_iter(permission) else permission.split('+'))
 
 
 @implementer(IAuthorizationPolicy)
 class ExtendedACLAuthorizationPolicy(object):
-
     def __init__(self, acl_resolver=resolve_acl, permission_parser=parse_permission, acl_inheritance_default=False):
         self.acl_resolver = acl_resolver
         self.permission_parser = permission_parser
         self.acl_inheritance_default = acl_inheritance_default
-
 
     def _collect_acls_to_examine(self, context):
         acls_to_examine = []
@@ -137,12 +137,7 @@ class ExtendedACLAuthorizationPolicy(object):
                     ace_permissions = [ace_permissions]
 
                 if everyone or ace_principals.issubset(principals):
-                    applicable_aces.append(
-                        (
-                            (location, acl),
-                            ACE(ace_action, ace_principals, ace_permissions, ace)
-                            )
-                        )
+                    applicable_aces.append(((location, acl), ACE(ace_action, ace_principals, ace_permissions, ace)))
                     if ace_action == Allow:
                         granted_permissions.update(ace_permissions)
                     else:
@@ -151,17 +146,9 @@ class ExtendedACLAuthorizationPolicy(object):
         required_permissions = self.permission_parser(permission)
 
         if granted_permissions.issuperset(required_permissions):
-            return ExtendedACLAllowed(
-                applicable_aces,
-                required_permissions,
-                principals
-                )
+            return ExtendedACLAllowed(applicable_aces, required_permissions, principals)
         else:
-            return ExtendedACLDenied(
-                applicable_aces,
-                required_permissions,
-                principals
-                )
+            return ExtendedACLDenied(applicable_aces, required_permissions, principals)
 
     def principals_allowed_by_permission(self, context, permission):
         allowed = set()
@@ -170,21 +157,20 @@ class ExtendedACLAuthorizationPolicy(object):
         permissions = self.permission_parser(permission)
 
         for location, acl in acls_to_examine:
-
             for ace_action, ace_principal, ace_permissions in reversed(acl):
-                if not is_nonstr_iter(ace_principals):
-                    ace_principals = [ace_principals]
-                ace_principals = set(ace_principals)
+                if not is_nonstr_iter(ace_principal):
+                    ace_principal = [ace_principal]
+                ace_principal = set(ace_principal)
                 if not is_nonstr_iter(ace_permissions):
                     ace_permissions = [ace_permissions]
 
                 if ace_permissions.issuperset(permissions):
                     if ace_action == Allow:
-                        allowed.update(ace_principals)
+                        allowed.update(ace_principal)
                     elif ace_action == Deny:
-                        if Everyone in ace_principals:
+                        if Everyone in ace_principal:
                             allowed.clear()
                         else:
-                            allowed.difference_update(ace_principals)
+                            allowed.difference_update(ace_principal)
 
         return allowed
